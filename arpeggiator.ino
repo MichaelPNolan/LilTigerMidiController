@@ -19,6 +19,11 @@ static int notesArpOpen = 0;
 
 uint8_t majorArp[arpLength] = {0,4,7,11,16}; //root 3rd 5th 7th 10th semitones or notes above note starting or stopping it
 uint8_t minorArp[arpLength] = {0,3,7,10,15}; // root 3rd 5th 7th 10th
+
+struct Chord{
+uint8_t numberOfNotes;
+int  chord[12]; };//up to 12 notes and they can be negative so you could have other octaves like -12,0,12,7,19 - which is only 2 notes but 3 octaves of root and 2 of 5th
+
 bool majorOrMinor[12] = {0,1,1,1,1,0,1,0,1,1,1,1};               // relative to whatever is key what type of arp would be most appropriate 0 is major, 1 is minor expand later
 uint8_t arpPatternUpDown[8] = {0,1,2,3,4,3,2,1};   // UDPATTERN I guess we can have a variety of patterns to use later start with just this eg reference the majorArp[x] 
 uint8_t arpPatterns[8][8] = { //assumes a 5 length
@@ -121,7 +126,7 @@ void incrementNoteSeq(){
   arp.seq++;
   if(arp.seq > 7){
     arp.seq = 0;
-    Serial.println();
+    Serial.println(); //"size: "+String(sizeof(majorArp))
   }
 }
 
@@ -167,5 +172,6 @@ void processArp(){ //this can get called endlessly and it will just either not p
 
 void stopArp(){
   arpStatus = LOW;
+ 
 
 }

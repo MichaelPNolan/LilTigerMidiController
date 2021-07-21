@@ -9,16 +9,20 @@
  */ 
 
 #include "MIDIUSB.h"
-#define ARP_PLAYER_MODE
+//#define ARP_PLAYER_MODE
 #define OCTAVE_DOWN
 
 #define LED_FLASHER 19   //this is the reset pin so maybe this is messed up
-#define MAXARPNOTES 5 //if this many notes are used notes will get stopped
 
-uint8_t notesPlayingArp[MAXARPNOTES];
-unsigned long int notesPlayingArpEnd[MAXARPNOTES];  //set a timer in mills and notes expire and get turned off
-uint8_t noteArpIndex = 0;
-static int notesArpOpen = 0;
+//In arpeggiator mode notes are tracked so they can be turned off because they are turned on/off auto
+//I brought this rotating queue of notes idea back here for a different reason. Tracking the length of time
+//since a note was triggered before it has been noteOff to trigger a mode, command or arpeggio chord
+#define MAXNOTES 8 //if this many notes are used notes will get stopped
+
+uint8_t notesPlaying[MAXNOTES];
+unsigned long int notesPlayingEnd[MAXNOTES];  //set a timer in mills and notes expire and get turned off
+uint8_t noteIndex = 0;
+int notesOpen = 0;
 
 // First parameter is the event type (0x09 = note on, 0x08 = note off).
 // Second parameter is note-on/note-off, combined with the channel.
@@ -37,15 +41,48 @@ uint8_t debouncePin;
 bool toggleArp = LOW;
 uint8_t arpNote;
 
+void incrementNoteIndex(){ //it only goes up and resets back to start of queue re-using
+  noteIndex++;
+  if(noteIndex >= MAXNOTES)
+    noteIndex = 0;  //start back at first note
+  Serial.println(" idx: "+String(noteIndex)+" Op:"+String(notesOpen));
+}
+
+void decrementNotesOpen(){
+ notesOpen=notesOpen-1;
+  if(notesOpen < 0){
+    notesOpen = 0;
+     //Serial.print("notesArpOpen calculation error");
+  }
+}
+
 // carefull not to put stuff inside here
 void noteOn(byte channel, byte pitch, byte velocity) {
-  midiEventPacket_t noteOn = {0x09, 0x90 | channel, pitch, velocity};
-  MidiUSB.sendMIDI(noteOn);
+  if(notesOpen < MAXNOTES){ //stop adding notes
+    midiEventPacket_t noteOn = {0x09, 0x90 | channel, pitch, velocity};
+    MidiUSB.sendMIDI(noteOn);
+    for(int i=0; i<MAXNOTES; i++){
+      if(notesPlaying[i] == 0){
+        notesPlaying[noteIndex] = uint8_t(pitch);
+        incrementNoteIndex();
+        notesOpen++;
+        break;
+      }
+    }
+  }
 }
 
 void noteOff(byte channel, byte pitch, byte velocity) {
   midiEventPacket_t noteOff = {0x08, 0x80 | channel, pitch, velocity};
   MidiUSB.sendMIDI(noteOff);
+  for(int i=0; i<MAXNOTES; i++){
+    if(notesPlaying[i] == pitch){
+      notesPlaying[i] = 0;
+      decrementNotesOpen();
+      Serial.print(notesPlaying[i]);
+      Serial.print("/");
+    }
+  }
 }
 
 void setup() {
@@ -62,6 +99,11 @@ void setup() {
       keyboardInputStates[i][1] = LOW; //previous state
 
   }
+  for(int i=0; i<MAXNOTES; i++){
+    notesPlaying[i] = 0;
+  }
+  notesOpen = 0;
+  
   AdcMul_Init(); // multiplexer is 4051 chip analogue channel switching from 3 pins defined in the Multipots4051 file
 }
 
